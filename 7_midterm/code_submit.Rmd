@@ -1,0 +1,341 @@
+---
+title: "code_submit"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r}
+rm(list=ls(all=TRUE))
+pacman::p_load(ggplot2, tidyverse, dplyr, modelr, lubridate)
+setwd('C:/Users/dnskd/Desktop/20Spring/graphics/midterm')
+options(scipen = 99999)
+knitr::opts_chunk$set(dev="CairoPNG", dpi = 110)
+```
+
+# 1. geom_smooth를 사용하지 않고 geom_smooth 효과를 갖는 그림 그리기
+```{r}
+mod <- loess(hwy ~ displ, data = mpg)
+smoothed <- data.frame(displ = seq(1.6, 7, length = 50))
+pred <- predict(mod, newdata = smoothed, se = TRUE)
+smoothed$hwy <- pred$fit
+smoothed$hwy_lwr <- pred$fit - 1.96 * pred$se.fit
+smoothed$hwy_upr <- pred$fit + 1.96 * pred$se.fit
+base <- mpg %>% ggplot(aes(displ, hwy)) + geom_point()
+base + geom_ribbon(data = smoothed, fill = 'grey', alpha = 0.4,  aes(ymin = hwy_lwr, ymax = hwy_upr))+ geom_path(data = smoothed, col = 'blue', size = 1, aes(displ, hwy)) 
+```
+
+# 2. 잘못된 점을 찾고, 올바른 그림을 그리시오.
+```{r}
+ggplot(mpg, aes(displ, hwy)) + geom_point(aes(color = drv, shape = drv)) + scale_color_discrete("Drive train")
+ggplot(mpg, aes(displ, hwy)) + geom_point(aes(color = drv, shape = drv)) + scale_color_discrete("Drive train") + scale_shape_discrete("Drive train")
+```
+
+# 3. mpg 자료를 이용하여 아래의 그림을 그리는 code를 작성하시오.
+```{r}
+for(i in 1:length(unique(mpg$class))){
+  assign(paste0("mod", i), lm(hwy ~ displ, data = subset(mpg, class == unique(mpg$class)[i])))
+}
+
+grid1 <- subset(mpg, class == unique(mpg$class)[1]) %>% select(displ, class) %>% gather_predictions(mod1)
+grid2 <- subset(mpg, class == unique(mpg$class)[2]) %>% select(displ, class) %>% gather_predictions(mod2)
+grid3 <- subset(mpg, class == unique(mpg$class)[3]) %>% select(displ, class) %>% gather_predictions(mod3)
+grid4 <- subset(mpg, class == unique(mpg$class)[4]) %>% select(displ, class) %>% gather_predictions(mod4)
+grid5 <- subset(mpg, class == unique(mpg$class)[5]) %>% select(displ, class) %>% gather_predictions(mod5)
+grid6 <- subset(mpg, class == unique(mpg$class)[6]) %>% select(displ, class) %>% gather_predictions(mod6)
+grid7 <- subset(mpg, class == unique(mpg$class)[7]) %>% select(displ, class) %>% gather_predictions(mod7)
+
+set <- list(grid1, grid2, grid3, grid4, grid5, grid6, grid7)
+grid <- Reduce('rbind', set)
+
+mpg %>% ggplot(aes(displ, hwy, col = class)) + geom_point(show.legend = FALSE)+geom_line(data = grid, size = 1, aes(y = pred)) + theme(legend.position = "bottom") + guides(color = guide_legend(title = " ", ncol = length(unique(mpg$class))))
+```
+
+# 4. Midterm-EDAdata1-2020.csv 자료 보기
+```{r}
+df <- read_csv('./midtermdata/Midterm-EDAdata1-2020.csv')
+summary(df)
+dim(df)
+head(df)
+
+# NA확인
+sum(is.na(df$gender))
+sum(is.na(df$ageG))
+sum(is.na(df$D56))
+sum(is.na(df$month))
+sum(is.na(df$count))
+
+# continuous 데이터 살펴보기
+summary(df$month)
+unique(df$month)
+summary(df$count)
+hist(df$count)
+
+# categorical 데이터 살펴보기
+unique(df$gender)
+unique(df$ageG)
+unique(df$D56) # 사망원인 코드는 56개지만, 본 데이터에서는 총 45개의 level과 NONE 존재
+length(which(df$D56 == "NONE")) # D56의 NA는 252개
+
+# ageG 10월 19일을 10-19로 수정
+df[which(df$ageG=="10월 19일"), 'ageG'] <- "10-19"
+unique(df$ageG)
+
+# 달별로 사망자 수
+df %>% group_by(month) %>% summarise(count = sum(count)) %>% ggplot(aes(month, count)) + geom_bar(stat = "identity")
+
+# 달 별로 어떤 원인으로 많이 사망하는가
+month_count <- df %>% group_by(month) %>% summarise(month_count = sum(count))
+df %>% group_by(month, D56) %>% summarise(disease_count = sum(count)) %>%  ggplot(aes(month, disease_count, fill = D56))+geom_bar(stat = "identity")
+df %>% filter(D56 == "D-025") %>% group_by(month) %>% summarise(count = sum(count))
+df %>% filter(D56 == "D-034") %>% group_by(month) %>% summarise(count = sum(count))
+df %>% filter(D56 == "D-035") %>% group_by(month) %>% summarise(count = sum(count))
+# 달 별로보다는 전체적으로 NONE- 악성신생물 - 심장질환 - 뇌혈관질환으로 인한 사망이 많다.
+
+# 전체 기록된 사망자수
+df %>% summarise(total = sum(count))
+
+# 나이대별 달별 사망자 수
+df %>% group_by(month, ageG) %>% summarise(age_count = sum(count, na.rm=T)) %>% ggplot(aes(month, age_count, fill = ageG)) + geom_bar(stat = "identity")
+# 70~79/80-89/over 90이 과반수를 차지함. 40-49에서 50-59로 넘어가면 사망자수 급격히 늘어남.
+
+# 성별 사망자 수
+df %>% group_by(gender) %>% summarise(n = sum(count)) %>% ggplot(aes(gender, n)) + geom_bar(stat = "identity")
+
+# 성별 달별 사망자 수
+df %>% group_by(month, gender) %>% summarise(gender_count = sum(count)) %>% ggplot(aes(month, gender_count, fill = gender)) + geom_bar(stat = "identity", position = "dodge")
+# 남성이 여성보다 사망자 수 수치가 많다.
+
+# 성별 나이별 사망자 수
+df %>% filter(!is.na(ageG)) %>% group_by(ageG, gender) %>% summarise(n = sum(count)) %>% ggplot(aes(ageG, n, fill = gender)) + geom_bar(stat = "identity", position = "dodge")
+
+# 나이 성별 사망 수 꺾은선
+df %>% filter(!is.na(ageG)) %>% group_by(ageG, gender) %>% summarise(n = sum(count)) %>% ggplot(aes(ageG, n, color = gender, group = gender)) + geom_line() + geom_point()
+
+
+
+# 전체 사망 원인 top5
+df %>% group_by(D56) %>% summarise(cases = sum(count)) %>% ggplot(aes(reorder(D56, cases), cases)) + geom_bar(stat = "identity")+coord_flip() 
+# top 6: D-025(악성신생물)/ NONE/ D-034(심장질환)/ D-035(뇌혈관 질환)/ D-038(폐렴)/ D-055(고의적 자해(자살)) => 남자 사망자수가 많아서 많이 반영된듯?
+top15 <- df %>% group_by(D56) %>% summarise(cases = sum(count)) %>% arrange(-cases) %>% filter(cases>2000) %>% select(D56) %>% unlist()
+                                                                                                                      
+
+# 나이대별 사망원인 top5
+ageG_sum <- df %>% filter(!is.na(ageG)) %>% group_by(ageG) %>% summarise(n = sum(count))
+df %>% filter(!is.na(ageG)) %>% group_by(ageG) %>% summarise(n = sum(count)) %>% ggplot(aes(ageG, n)) + geom_bar(stat="identity")
+
+# 나이대별 사망자수가 너무 차이가 나니까 비율로 ranking을 정하는게 좋을 것 같다.
+df %>% filter(!is.na(ageG)) %>% group_by(ageG, D56,gender) %>% summarise(cases = sum(count, na.rm=T)) %>% ggplot(aes(ageG, cases, fill = D56)) + geom_bar(stat = "identity", position="fill", color = 'black') + facet_wrap(~gender)
+df %>% filter(!is.na(ageG), D56 %in% top15) %>% group_by(ageG, D56) %>% summarise(cases = sum(count, na.rm=T)) %>% ggplot(aes(ageG, cases, fill = D56)) + geom_bar(stat = "identity", position="fill")
+
+
+# 성별 사망원인 top5
+df %>% group_by(gender) %>% summarise(n = sum(count)) # 남성 사망자가 3만명 정도 많음.
+df %>% group_by(gender, D56) %>% summarise(cases=sum(count)) %>% ggplot(aes(reorder(D56, cases), cases, fill = gender)) + geom_bar(stat = "identity", position = "dodge") + coord_flip()
+# 여자 top 5 : NONE/ D-025(악성신생물)/ D-034(심장질환)/ D-035(뇌혈관 질환)/ D-038(폐렴)
+# 남자 top 5 : D-025(악성신생물)/ NONE/ D-034(심장질환)/ D-035(뇌혈관질환)/ D-055(고의적 자해(자살))
+# 여성이 남성보다 사망자수가 많은 질병 : NONE/ D-034(심장질환)/ D-033(고혈압성질환)/ D-031(알츠하이머병)/ D-011(패혈증)/등등등
+
+
+# 나이 & 성별 사망수 geom_tile로 나타내기
+df %>% filter(!is.na(ageG)) %>% group_by(gender, ageG) %>% summarise(n = sum(count)) %>% ggplot(aes(gender, ageG, fill = n)) + geom_tile() + scale_fill_gradient(low = 'white', high = 'blue')
+# 여자는 80-89에 모든 사망자수가 몰려있고 앞뒤로 사망자수가 많은 편, 60-69까지는 그렇게 사망자수가 많지는 않은 거 같다.
+# 남자는 50-59부터 사망자수가 증가하기 시작하여 70-79때 가장 많고 그다음이 80-89이다.
+
+
+# 나이 성별 사망자수? 
+df %>% filter(!is.na(ageG)) %>% mutate(demo = paste(ageG, gender, sep="_")) %>% group_by(demo, D56) %>% summarise(n =sum(count)) %>%
+  ggplot(aes(reorder(D56,n), n)) + geom_bar(stat = "identity")+coord_flip() + facet_wrap(~demo, scales = "free_y", ncol = 5)
+
+# 질병 달별
+df %>% group_by(D56, month) %>% summarise(n = sum(count)) %>% ggplot(aes(month, n, color = D56)) + geom_line()+geom_point() # 몇개 눈에 띄는게 있지만 알아보기 쉽지 않다.
+df %>% group_by(D56, month) %>% summarise(n = sum(count)) %>% ggplot(aes(month, n, color = D56)) + geom_line()+geom_point()+ylim(c(0,1000)) 
+df %>% filter(!is.na(ageG)) %>% group_by(ageG, month, gender) %>% summarise(n = sum(count)) %>% ggplot(aes(month, n, color=ageG, group=ageG)) + geom_line() +geom_point()+ facet_wrap(~gender)
+
+
+# count의 차가 너무 커서 log transformation을 해봤다.
+df %>% group_by(D56, month) %>% summarise(n = sum(count)) %>% mutate(ln = log(n)) %>% ggplot(aes(month, ln, color = D56)) + geom_line()+geom_point() # 몇개 눈에 띄는게 있지만 알아보기 쉽지 않다.
+# 달별로 사망자 수의 차이가 큰 사망원인들이 존재.
+
+df %>% filter(!is.na(ageG)) %>% group_by(gender, ageG, D56) %>% summarise(n = sum(count)) %>% ggplot(aes(reorder(D56, n), ageG, fill = n)) + geom_tile() + coord_flip()+ theme(axis.text.x  = element_text(hjust =1, angle = 90))+scale_fill_gradient(low = "white", high = "blue") + facet_wrap(~gender)
+# 여기서 scale의 차이가 너무 크니까 오히려 더 보기 힘든거같다.
+## count를 log transformation
+df %>% filter(!is.na(ageG)) %>% group_by(gender, ageG, D56) %>% summarise(n = sum(count))%>% mutate(ln = log(n)) %>% ggplot(aes(reorder(D56, ln), ageG, fill = ln)) + geom_tile() + coord_flip()+labs(title = "The number of death by gender , age, and casues", subtitle = "log transformation of the number of death", x = "Cause", y = "Age") +theme(axis.text.x  = element_text(hjust =1, angle = 90), plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + scale_fill_gradient("log(death)",low = "white", high = "blue") +facet_wrap(~gender)
+
+```
+
+# 5. Midterm-EDAdata2-2020.csv
+```{r}
+rm(list=ls(all=TRUE))
+
+# data load
+df <- read_csv('./midtermdata/Midterm-EDAdata2-2020.csv')
+
+# data 확인
+names(df)
+summary(df)
+
+for(i in 1:16){
+  print(sum(is.na(df[[i]])))
+}
+length(unique(df$X1)) # row name으로 보임. 필요 없다고 판단
+df <- df[,-1]
+names(df)[1] <- "X1"
+names(df)
+str(df)
+dim(df)
+summary(df) # mean값이 모두 0이다. scale 데이터
+
+par(mfrow = c(4,4))
+par(mar=c(1,1,1,1))
+for(i in 1:16){
+  hist(df[[i]], main = paste0('Histogram of X', i), xlab = paste0('X',i))
+}
+par(mfrow = c(1,1))
+
+# 반복되는 자료 : X12, X15
+unique(df$X12)
+unique(df$X15)
+
+nest <- df %>% mutate(X12 = factor(X12))%>% group_by(X12) %>% nest
+nest2 <- df %>%mutate(X15 = factor(X15))%>% group_by(X15) %>% nest
+```
+# correlation 알아보기
+```{r, eval=FALSE}
+library(GGally)
+ggpairs(nest$data[[1]])
+ggpairs(nest$data[[2]])
+ggpairs(nest$data[[3]])
+
+ggpairs(nest2$data[[1]])
+ggpairs(nest2$data[[2]])
+ggpairs(nest2$data[[3]])
+```
+
+```{r}
+nest$data[[1]] %>% ggplot(aes(X5, X13)) + geom_point()
+nest$data[[2]] %>% ggplot(aes(X5, X13)) + geom_point()
+nest$data[[3]] %>% ggplot(aes(X5, X13)) + geom_point()
+nest2$data[[1]] %>% ggplot(aes(X5, X13)) + geom_point()
+nest2$data[[2]] %>% ggplot(aes(X5, X13)) + geom_point()
+nest2$data[[3]] %>% ggplot(aes(X5, X13)) + geom_point()
+```
+
+# 6.
+```{r}
+rm(list=ls(all=TRUE))
+
+options(scipen = 99999)
+# data load
+df <- read_csv('./midtermdata/COVID-19-2020-04-20.csv')
+head(df)
+names(df)
+for(i in 1:ncol(df)){
+  print(mean(is.na(df[[i]])))
+}
+names(df)[c(7,9,10)]
+
+dim(df)
+summary(df)
+
+# continuous 데이
+par(mfrow = c(1,3))
+hist(df$cases)
+hist(df$deaths)
+hist(df$popData2018)
+sum(df$cases<0) # NA로 봐도 될거같다.
+df[which(df$cases<0),]
+sum(df$deaths<0)
+
+# categorical 데이터
+length(unique(df$geoId))
+length(unique(df$continentExp))
+unique(df$continentExp)
+length(unique(df$countryterritoryCode))
+length(unique(df$countriesAndTerritories))
+
+# 자료의 특성을 살펴보고 각 나라마다의 코로나 확진 추이의 차이를 살펴보시오.
+# 모든 나라 살펴보기
+df %>% filter(cases >= 0) %>% ggplot(aes(dateRep, cases, group=countriesAndTerritories, col = continentExp)) + geom_line() + geom_point() +labs(x="date", title = "Cases by countries", subtitle = "colored by continents") + theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5))+facet_wrap(~continentExp)
+df %>% ggplot(aes(dateRep, cases, group=countriesAndTerritories)) + geom_line(alpha = 1/3) + ggtitle("cases by countries")
+df %>% ggplot(aes(dateRep, deaths, group=countriesAndTerritories)) + geom_line(alpha = 1/3) + ggtitle("deaths by countries")
+
+# bubble chart그리기
+df2 <- df %>% filter(cases >= 0, deaths>=0) %>%  group_by(continentExp, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths), pop = unique(popData2018)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths == 0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths), lpop = log(pop))%>% mutate(rank = rank(-tcases, 'first'))
+df2 %>% ggplot(aes(ltcases, ltdeaths)) + geom_point(aes(size = pop, col = continentExp), alpha = 0.5) + scale_size_continuous("Population(2018)", breaks = c(100000000, 500000000, 1000000000), label = c("100m", "500m", "1b")) + scale_color_discrete("Continent") + labs(x = "log(total of cases)", y = "log(total of deaths)", title = "Total deaths and cases of COVID19 by continent", subtitle = "log scaled deaths and cases from 2019/12/30 to 2020/04/20 \n labeling top 3 total cases by continent") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))+
+  geom_text(data = df2 %>% filter(rank < 4) , aes(label = countriesAndTerritories), col = 'black', size = 2.5)
+
+# Heat map 그리기
+df3 <- df %>% filter(cases >=0, deaths >=0) %>% group_by(dateRep, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths==0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths))
+df3 %>% ggplot(aes(dateRep, reorder(countriesAndTerritories, ltcases), fill = ltcases)) + geom_tile() + scale_fill_gradient('log(total cases a day)', low = "white", high = 'blue') + labs(x = "date", y = "Countries", title = "log scaled cases a day by countries", subtitle = "from 2019/12/31 to 2020/04/20") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))
+
+df4 <- df %>% filter(cases >=0, deaths >=0) %>% group_by(dateRep, continentExp) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths==0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths))
+df4 %>% ggplot(aes(dateRep, reorder(continentExp, ltcases), fill = ltcases)) + geom_tile() + scale_fill_gradient('log(total cases a day)', low = "white", high = 'blue') + labs(x = "date", y = "Continent", title = "log scaled cases a day by continent", subtitle = "from 2019/12/31 to 2020/04/20") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))
+
+
+# 지도 그리기
+library(maps)
+world <- map_data("world")
+world <- world %>% mutate(region = str_replace_all(region, " ", "_"))
+world[which(world$region == "USA"), 'region'] <- 'United_States_of_America'
+world[which(world$region == "UK"), 'region'] <- 'United_Kingdom'
+#df %>% filter(!countriesAndTerritories %in% unique(world$region)) %>% select(countriesAndTerritories) %>% unique() %>% print(n=Inf)
+df5 <- df %>% filter(cases >= 0, deaths>=0, month != 12) %>%  group_by(month, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths == 0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths)) 
+df_map <- world %>% inner_join(df5, by= c('region'='countriesAndTerritories'))
+df_map[is.na(df_map$ltcases), 'ltcases'] <- 0
+ggplot() + geom_polygon(data = df_map, aes(x=long, y = lat, group = group, fill = ltcases), col = 'grey') + labs(title="log scaled cases by month all over the world", subtitle = "from 2020/01/01 to 2020/04/20")+theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5)) + scale_fill_gradient('log(total cases a month)', low = "white", high = 'blue')+ facet_wrap(~month, ncol = 2, nrow=2)
+df_map[is.na(df_map$ltdeaths), 'ltdeaths'] <- 0
+ggplot() + geom_polygon(data = df_map, aes(x=long, y = lat, group = group, fill = ltdeaths), col = 'grey') + labs(title="log scaled deaths by month all over the world", subtitle = "from 2020/01/01 to 2020/04/20")+theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5)) + scale_fill_gradient('log(total deaths a month)', low = "white", high = 'blue')+ facet_wrap(~month, ncol = 2, nrow=2)
+
+
+# continent별 heatmap
+df %>% filter(cases >=0, deaths >=0, continentExp=="Asia") %>% group_by(dateRep, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths==0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths))%>% 
+  ggplot(aes(dateRep, reorder(countriesAndTerritories, ltcases), fill = ltcases)) + geom_tile() + scale_fill_gradient('log(total cases a day)', low = "white", high = 'red') + labs(x = "date", y = "Countries", title = "log scaled cases a day by countries in Asia", subtitle = "from 2019/12/31 to 2020/04/20") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))
+
+df %>% filter(cases >=0, deaths >=0, continentExp=="America") %>% group_by(dateRep, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths==0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths))%>% 
+  ggplot(aes(dateRep, reorder(countriesAndTerritories, ltcases), fill = ltcases)) + geom_tile() + scale_fill_gradient('log(total cases a day)', low = "white", high = 'steelblue') + labs(x = "date", y = "Countries", title = "log scaled cases a day by countries in America", subtitle = "from 2019/12/31 to 2020/04/20") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))
+
+df %>% filter(cases >=0, deaths >=0, continentExp=="Africa") %>% group_by(dateRep, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths==0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths))%>% 
+  ggplot(aes(dateRep, reorder(countriesAndTerritories, ltcases), fill = ltcases)) + geom_tile() + scale_fill_gradient('log(total cases a day)', low = "white", high = 'green') + labs(x = "date", y = "Countries", title = "log scaled cases a day by countries in Africa", subtitle = "from 2019/12/31 to 2020/04/20") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))
+
+df %>% filter(cases >=0, deaths >=0, continentExp=="Oceania") %>% group_by(dateRep, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths==0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths))%>% 
+  ggplot(aes(dateRep, reorder(countriesAndTerritories, ltcases), fill = ltcases)) + geom_tile() + scale_fill_gradient('log(total cases a day)', low = "white", high = 'orange') + labs(x = "date", y = "Countries", title = "log scaled cases a day by countries in Oceania", subtitle = "from 2019/12/31 to 2020/04/20") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))
+
+df %>% filter(cases >=0, deaths >=0, continentExp=="Europe") %>% group_by(dateRep, countriesAndTerritories) %>% summarise(tcases = sum(cases), tdeaths = sum(deaths)) %>% mutate(tcases = ifelse(tcases == 0, 1, tcases), tdeaths = ifelse(tdeaths==0, 1, tdeaths)) %>% mutate(ltcases = log(tcases), ltdeaths = log(tdeaths))%>% 
+  ggplot(aes(dateRep, reorder(countriesAndTerritories, ltcases), fill = ltcases)) + geom_tile() + scale_fill_gradient('log(total cases a day)', low = "white", high = 'purple') + labs(x = "date", y = "Countries", title = "log scaled cases a day by countries in Europe", subtitle = "from 2019/12/31 to 2020/04/20") + theme(plot.title = element_text(hjust = 0.5, size = 20), plot.subtitle = element_text(hjust = 0.5))
+
+
+# 누적 데이터 만들기
+df_order <- df %>% arrange(dateRep)
+by_countries <- df_order %>% group_by(countriesAndTerritories,continentExp) %>% nest()
+
+for(i in 1:206){
+  by_countries$data[[i]]$cumsum_cases <- cumsum(by_countries$data[[i]]$cases)
+  by_countries$data[[i]]$cumsum_deaths <- cumsum(by_countries$data[[i]]$deaths)
+}
+
+cum <- unnest(by_countries)
+cum
+cum %>% ggplot(aes(dateRep, cumsum_cases, group=countriesAndTerritories, col = continentExp)) + geom_line()
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases)) %>% ggplot(aes(dateRep, total, fill = continentExp))+geom_bar(stat="identity")
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases)) %>% ggplot(aes(dateRep, total, fill = continentExp))+geom_bar(stat="identity", position="fill")
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases)) %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity", position="fill") + theme(legend.position = "none")+facet_wrap(~continentExp)
+
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Asia") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity")
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Asia") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity", position="fill")
+
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Europe") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity")
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Europe") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity", position="fill")
+
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="America") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity")
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="America") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity", position="fill")
+
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Oceania") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity")
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Oceania") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity", position="fill")
+
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Africa") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity")
+cum %>% group_by(dateRep, countriesAndTerritories, continentExp) %>% summarise(total=sum(cumsum_cases))%>% filter(continentExp=="Africa") %>% ggplot(aes(dateRep, total, fill = countriesAndTerritories))+geom_bar(stat="identity", position="fill")
+
+
+```
