@@ -1,4 +1,4 @@
-# kaggle_visualization
+# Visualization using ggplot and plotly in R
 
 
 1. nycflights
