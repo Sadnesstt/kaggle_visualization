@@ -27,3 +27,5 @@ R의 nycflights13 내장 데이터 사용
 8. R shiny
 
    데이터 출처 : tidyverse 패키지 내장 데이터 mpg
+   
+   R 4.0.0 문제로 R shiny upload 불가해 app.R 파일 첨부
