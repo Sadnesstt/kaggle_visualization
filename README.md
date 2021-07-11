@@ -29,3 +29,7 @@ R의 nycflights13 내장 데이터 사용
    데이터 출처 : tidyverse 패키지 내장 데이터 mpg
    
    R 4.0.0의 R shiny publish 문제로 app.R 파일 첨부
+   
+9. 기말 프로젝트
+   
+   LoL(League of Legend) 게임 데이터 분석 - 최종보고서
